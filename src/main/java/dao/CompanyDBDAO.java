@@ -3,33 +3,23 @@ package dao;
 import entities.Company;
 import exceptions.ExistException;
 import exceptions.NotExistException;
+import pool.ConnectionPool;
 
 import java.sql.*;
 import java.util.List;
-import java.util.ResourceBundle;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 public class CompanyDBDAO implements CompanyDAO {
 
-    private Connection connection;
+    private ConnectionPool pool = ConnectionPool.getInstance();
 
-    public CompanyDBDAO() {
-        try {
-            connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/my_db" + "?user=root"
-                    + "&password=root" + "&useUnicode=true" + "&useJDBCCompliantTimezoneShift=true"
-                    + "&useLegacyDatetimeCode=false" + "&serverTimezone=UTC"
-            );
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
+
     public Company getByName(String companyName) {
         Company company = null;
 
         String sql = "SELECT * FROM COMPANY WHERE NAME = ?";
+        Connection connection = pool.getConnection();
 
-        try(PreparedStatement pstmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
             pstmt.setString(1, companyName);
 
@@ -41,8 +31,10 @@ public class CompanyDBDAO implements CompanyDAO {
                 company = new Company(id, companyName, password);
             }
 
-        }catch(SQLException e) {
+        } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            pool.returnConnection(connection);
         }
 
         return company;
@@ -54,8 +46,8 @@ public class CompanyDBDAO implements CompanyDAO {
         Company company = null;
 
         String sql = "SELECT * FROM COMPANY WHERE ID = ?";
-
-        try(PreparedStatement pstmt = connection.prepareStatement(sql)) {
+        Connection connection = pool.getConnection();
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
             pstmt.setLong(1, companyId);
 
@@ -68,8 +60,10 @@ public class CompanyDBDAO implements CompanyDAO {
                 company = new Company(companyId, name, password);
             }
 
-        }catch(SQLException e) {
+        } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            pool.returnConnection(connection);
         }
 
         if (company == null) {
@@ -80,15 +74,15 @@ public class CompanyDBDAO implements CompanyDAO {
     }
 
 
-
     @Override
     public Company create(Company company) throws ExistException {
         if (getByName(company.getName()) != null) {
             throw new ExistException(String.format("Company by the name %s already exists", company.getName()));
         }
 
+        Connection connection = pool.getConnection();
         String sql = "INSERT INTO COMPANY (NAME, PASSWORD) VALUES (? ,?)";
-        try(PreparedStatement pstmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement pstmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
             pstmt.setString(1, company.getName());
             pstmt.setString(2, company.getPassword());
@@ -96,13 +90,15 @@ public class CompanyDBDAO implements CompanyDAO {
             pstmt.executeUpdate();
 
             ResultSet resultSet = pstmt.getGeneratedKeys();
-            
+
             if (resultSet.next()) {
                 company.setId(resultSet.getLong(1));
             }
 
-        } catch(SQLException e) {
+        } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            pool.returnConnection(connection);
         }
 
         return company;
